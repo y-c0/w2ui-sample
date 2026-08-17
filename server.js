@@ -29,16 +29,109 @@ const prefectures = [
 let stores = [
   { id: 1, name: '渋谷本店', pref_code: '13' },
   { id: 2, name: '大阪支店', pref_code: '27' },
-  { id: 3, name: '福岡支店', pref_code: '40' }
+  { id: 3, name: '福岡支店', pref_code: '40' },
+  { id: 4, name: '札幌支店', pref_code: '01' },
+  { id: 5, name: '仙台支店', pref_code: '04' },
+  { id: 6, name: '横浜支店', pref_code: '14' },
+  { id: 7, name: '名古屋支店', pref_code: '23' },
+  { id: 8, name: '京都支店', pref_code: '26' },
+  { id: 9, name: '神戸支店', pref_code: '28' },
+  { id: 10, name: '広島支店', pref_code: '34' },
+  { id: 11, name: '那覇支店', pref_code: '47' },
+  { id: 12, name: '金沢支店', pref_code: '17' }
 ];
-let nextId = 4;
+let nextId = 13;
+
+// --- お気に入り（インメモリ、ユーザーID -> 店舗IDのSet） ---
+// 本番(Spring Boot)側では認証済みユーザーのIDを使う想定。このモックではヘッダで疑似指定する。
+const favoritesByUser = {
+  user1: new Set([1, 3])
+};
+
+function getUserId(req) {
+  return req.headers['x-user-id'] || 'user1';
+}
+
+function getFavoriteSet(userId) {
+  if (!favoritesByUser[userId]) favoritesByUser[userId] = new Set();
+  return favoritesByUser[userId];
+}
 
 app.get('/api/prefectures', (req, res) => {
   res.json({ prefectures });
 });
 
+// デバッグ/動作確認用（グリッドからは使用しない。フィルタ・ページングなしの全件）
 app.get('/api/stores', (req, res) => {
   res.json({ stores });
+});
+
+// w2ui グリッドのリモートデータソース用エンドポイント
+// リクエスト形式(w2ui既定の dataType: 'HTTPJSON'): GET + クエリパラメータ request=<JSONエンコード文字列>
+//   { limit, offset, search: [{field,type,operator,value}], sort: [{field,direction}], favorite_only }
+// レスポンス形式(w2uiが期待する形): { status: 'success', total, records: [{recid, id, name, pref_code, favorite}] }
+app.get('/api/stores/search', (req, res) => {
+  const userId = getUserId(req);
+  const favSet = getFavoriteSet(userId);
+  let parsed = {};
+  try {
+    parsed = JSON.parse(req.query.request || '{}');
+  } catch (e) {
+    return res.status(400).json({ status: 'error', message: 'invalid request param' });
+  }
+  const {
+    limit = 20,
+    offset = 0,
+    search = [],
+    sort = [],
+    favorite_only = false
+  } = parsed;
+
+  let result = stores.map((s) => ({ ...s, favorite: favSet.has(s.id) }));
+
+  if (favorite_only) {
+    result = result.filter((s) => s.favorite);
+  }
+
+  search.forEach((cond) => {
+    const value = String(cond.value || '').toLowerCase();
+    if (!value) return;
+    if (cond.field === 'name') {
+      result = result.filter((s) => {
+        const name = s.name.toLowerCase();
+        return cond.operator === 'contains' ? name.includes(value) : name.startsWith(value);
+      });
+    } else if (cond.field === 'pref_code') {
+      result = result.filter((s) => s.pref_code === cond.value);
+    }
+  });
+
+  sort.forEach((s) => {
+    result.sort((a, b) => {
+      const av = a[s.field];
+      const bv = b[s.field];
+      const cmp = av > bv ? 1 : av < bv ? -1 : 0;
+      return s.direction === 'desc' ? -cmp : cmp;
+    });
+  });
+
+  const total = result.length;
+  const paged = result.slice(offset, offset + limit).map((s) => ({ ...s, recid: s.id }));
+
+  res.json({ status: 'success', total, records: paged });
+});
+
+// お気に入り登録/解除（クリックした瞬間に即時反映）
+app.post('/api/favorites/:storeId', (req, res) => {
+  const userId = getUserId(req);
+  getFavoriteSet(userId).add(Number(req.params.storeId));
+  res.json({ status: 'success' });
+});
+
+app.delete('/api/favorites/:storeId', (req, res) => {
+  const userId = getUserId(req);
+  getFavoriteSet(userId).delete(Number(req.params.storeId));
+  res.json({ status: 'success' });
 });
 
 // 編集/追加された行をまとめて受け取り、新規行にはサーバ側でIDを採番する

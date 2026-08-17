@@ -9,10 +9,11 @@
 <style>
   body { font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; margin: 20px; }
   h1 { font-size: 18px; }
-  #toolbar { margin-bottom: 10px; }
-  #toolbar button { padding: 6px 14px; margin-right: 8px; cursor: pointer; }
+  #toolbar { margin-bottom: 10px; display: flex; align-items: center; gap: 16px; }
+  #toolbar button { padding: 6px 14px; cursor: pointer; }
   #btn-submit { background: #2b6cb0; color: #fff; border: 1px solid #2b6cb0; border-radius: 3px; }
   #btn-add { background: #fff; border: 1px solid #999; border-radius: 3px; }
+  #toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   #grid { width: 100%; height: 420px; }
   .btn-edit, .btn-done { padding: 2px 10px; cursor: pointer; }
   .edit-input, .edit-select { width: 95%; box-sizing: border-box; }
@@ -24,6 +25,7 @@
 <h1>店舗一覧</h1>
 
 <div id="toolbar">
+  <label><input type="checkbox" id="chk-favorite-only" checked> お気に入りのみ表示</label>
   <button id="btn-add">＋ 行追加</button>
   <button id="btn-submit">登録</button>
 </div>
@@ -31,6 +33,10 @@
 <div id="grid"></div>
 
 <script>
+// 本来は Spring Boot 側の認証(ログインユーザー)から取得する値。
+// ここではモックとして固定IDを全リクエストのヘッダに載せる。
+const CURRENT_USER_ID = 'user1';
+
 let grid;
 let prefectures = [];
 let editingRecid = null;   // 現在編集中の行の recid（null=編集中の行なし）
@@ -72,13 +78,41 @@ function finishEdit(recid) {
   grid.refresh();
 }
 
+// お気に入りチェックボックスは編集モードと独立して、クリックした瞬間に即保存する
+function toggleFavorite(storeId, checked) {
+  fetch(`/api/favorites/${storeId}`, {
+    method: checked ? 'POST' : 'DELETE',
+    headers: { 'X-User-Id': CURRENT_USER_ID }
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error('サーバエラー');
+      const rec = grid.records.find((r) => r.id === storeId);
+      if (rec) rec.favorite = checked;
+      // 「お気に入りのみ表示」中に外した場合は一覧から消えるようにリロードする
+      if (!checked && $('#chk-favorite-only').is(':checked')) {
+        grid.reload();
+      }
+    })
+    .catch((err) => {
+      alert('お気に入りの更新に失敗しました: ' + err.message);
+      grid.refresh(); // チェックボックスの見た目を元の状態に戻す
+    });
+}
+
 const columns = [
   {
-    field: 'id', caption: '店舗ID', size: '100px', sortable: true,
+    field: 'favorite', text: 'お気に入り', size: '90px', sortable: true,
+    render: (record) => (
+      `<input type="checkbox" ${record.favorite ? 'checked' : ''} ${record.id ? '' : 'disabled'}
+         onchange="toggleFavorite(${record.id}, this.checked)">`
+    )
+  },
+  {
+    field: 'id', text: '店舗ID', size: '100px', sortable: true,
     render: (record) => (record.id ? record.id : '<span class="new-badge">(未登録)</span>')
   },
   {
-    field: 'name', caption: '店舗名', size: '35%',
+    field: 'name', text: '店舗名', size: '30%', sortable: true, searchable: true,
     render: (record) => {
       if (record.recid === editingRecid) {
         return `<input type="text" class="edit-input" value="${escapeHtml(record.name)}"
@@ -88,7 +122,7 @@ const columns = [
     }
   },
   {
-    field: 'pref_code', caption: '都道府県', size: '25%',
+    field: 'pref_code', text: '都道府県', size: '20%', sortable: true,
     render: (record) => {
       if (record.recid === editingRecid) {
         const opts = ['<option value="">選択してください</option>']
@@ -101,7 +135,7 @@ const columns = [
     }
   },
   {
-    field: 'actions', caption: '', size: '110px',
+    field: 'actions', text: '', size: '100px',
     render: (record) => (
       record.recid === editingRecid
         ? `<button class="btn-done" onclick="finishEdit(${record.recid})">完了</button>`
@@ -117,7 +151,7 @@ function addRow() {
   }
   newRowSeq -= 1;
   const recid = newRowSeq; // 負数なのでサーバ採番済みIDと衝突しない
-  grid.records.unshift({ recid, id: null, name: '', pref_code: '' });
+  grid.records.unshift({ recid, id: null, name: '', pref_code: '', favorite: false });
   editingRecid = recid;
   grid.refresh();
 }
@@ -147,35 +181,40 @@ function submitAll() {
       if (!res.ok) throw new Error('サーバエラー');
       return res.json();
     })
-    .then((data) => {
-      grid.records = data.stores.map((s) => ({ recid: s.id, id: s.id, name: s.name, pref_code: s.pref_code }));
+    .then(() => {
       editingRecid = null;
-      grid.refresh();
+      grid.reload(); // ページング/検索/お気に入り条件を維持したままサーバから最新状態を取り直す
       alert('登録しました。');
     })
     .catch((err) => alert('送信に失敗しました: ' + err.message));
 }
 
 $(function () {
-  Promise.all([
-    fetch('/api/prefectures').then((r) => r.json()),
-    fetch('/api/stores').then((r) => r.json())
-  ]).then(([prefRes, storeRes]) => {
-    prefectures = prefRes.prefectures;
-    const records = storeRes.stores.map((s) => ({ recid: s.id, id: s.id, name: s.name, pref_code: s.pref_code }));
+  fetch('/api/prefectures')
+    .then((r) => r.json())
+    .then((prefRes) => {
+      prefectures = prefRes.prefectures;
 
-    $('#grid').w2grid({
-      name: 'grid',
-      header: '店舗一覧',
-      show: { header: false, toolbar: false, footer: true, lineNumbers: false },
-      columns: columns,
-      records: records
+      $('#grid').w2grid({
+        name: 'grid',
+        header: '店舗一覧',
+        url: '/api/stores/search',
+        httpHeaders: { 'X-User-Id': CURRENT_USER_ID },
+        postData: { favorite_only: true }, // 初期表示はお気に入りのみ
+        limit: 5,
+        show: { header: false, toolbar: true, toolbarSearch: true, footer: true, lineNumbers: false },
+        columns: columns
+      });
+      grid = w2ui.grid;
+
+      $('#btn-add').on('click', addRow);
+      $('#btn-submit').on('click', submitAll);
+      $('#chk-favorite-only').on('change', function () {
+        grid.postData.favorite_only = $(this).is(':checked');
+        grid.offset = 0;
+        grid.reload();
+      });
     });
-    grid = w2ui.grid;
-
-    $('#btn-add').on('click', addRow);
-    $('#btn-submit').on('click', submitAll);
-  });
 });
 </script>
 
