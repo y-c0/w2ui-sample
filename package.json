@@ -1,0 +1,12 @@
+{
+  "name": "w2ui-store-sample",
+  "version": "1.0.0",
+  "private": true,
+  "description": "w2ui 1.5 store list grid sample (editable rows + server submit)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
