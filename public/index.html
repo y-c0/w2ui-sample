@@ -38,7 +38,9 @@
 const CURRENT_USER_ID = 'user1';
 
 let grid;
-let prefectures = [];
+let regions = [];       // 都道府県マスタ { cd_region, nm_region }
+let locations = [];     // 立地マスタ { cd_cvs_location, nm_cvs_location }
+let chains = [];        // チェーンマスタ { cd_cvs_chain, nm_cvs_chain }
 let editingRecid = null;   // 現在編集中の行の recid（null=編集中の行なし）
 let newRowSeq = 0;         // 未登録行の recid 採番用（負数にして既存IDと衝突しないようにする）
 
@@ -46,11 +48,6 @@ function escapeHtml(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, (ch) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
   ));
-}
-
-function prefName(code) {
-  const p = prefectures.find((p) => p.code === code);
-  return p ? p.name : '';
 }
 
 // select/input から呼ばれ、編集中データをレコードに反映するだけ（w2ui の再描画はしない＝入力中のフォーカス維持のため）
@@ -79,12 +76,22 @@ function startEdit(recid) {
 
 function finishEdit(recid) {
   const rec = grid.records.find((r) => r.recid === recid);
-  if (!rec.name || !rec.pref_code) {
-    alert('店舗名と都道府県を入力してください。');
+  if (!rec.nm_cvs_store || !rec.cd_region || !rec.cd_cvs_location || !rec.cd_cvs_chain) {
+    alert('店舗名・都道府県・立地・チェーンを入力してください。');
     return;
   }
   editingRecid = null;
   grid.refresh();
+}
+
+// 編集中/行追加中に検索・リロード・ソート・お気に入り絞り込み変更をしようとした場合の確認。
+// 続行してよければ編集状態をリセットして true、キャンセルなら何もせず false を返す。
+// （リロードすると、行追加でまだ登録していない行や、途中まで直した編集内容は失われる）
+function confirmResetEdit() {
+  if (editingRecid === null) return true;
+  if (!confirm('編集中の状態をリセットします。よろしいですか？')) return false;
+  editingRecid = null;
+  return true;
 }
 
 // お気に入りチェックボックスは編集モードと独立して、クリックした瞬間に即保存する
@@ -95,7 +102,7 @@ function toggleFavorite(storeId, checked) {
   })
     .then((res) => {
       if (!res.ok) throw new Error('サーバエラー');
-      const rec = grid.records.find((r) => r.id === storeId);
+      const rec = grid.records.find((r) => r.id_cvs_store === storeId);
       if (rec) rec.favorite = checked;
       // 「お気に入りのみ表示」中に外した場合は一覧から消えるようにリロードする
       if (!checked && $('#chk-favorite-only').is(':checked')) {
@@ -108,41 +115,50 @@ function toggleFavorite(storeId, checked) {
     });
 }
 
+// 都道府県・立地・チェーンはいずれも「マスタから選択するプルダウン列」という同じ形なので、
+// 列定義を共通のファクトリ関数で生成する（コード/名称のペアをマスタ配列から解決する）
+function makeMasterSelectColumn(idField, nameField, text, size, getMaster) {
+  return {
+    field: idField, text, size, sortable: true,
+    render: (record) => {
+      if (record.recid === editingRecid) {
+        const opts = ['<option value="">選択してください</option>']
+          .concat(getMaster().map((m) =>
+            `<option value="${m[idField]}" ${m[idField] === record[idField] ? 'selected' : ''}>${escapeHtml(m[nameField])}</option>`
+          )).join('');
+        return `<select class="edit-select" onchange="updateField(${record.recid},'${idField}',this.value)">${opts}</select>`;
+      }
+      const m = getMaster().find((x) => x[idField] === record[idField]);
+      return escapeHtml(m ? m[nameField] : '');
+    }
+  };
+}
+
 const columns = [
   {
     field: 'favorite', text: 'お気に入り', size: '90px', sortable: true,
     render: (record) => (
-      `<input type="checkbox" ${record.favorite ? 'checked' : ''} ${record.id ? '' : 'disabled'}
-         onchange="toggleFavorite(${record.id}, this.checked)">`
+      `<input type="checkbox" ${record.favorite ? 'checked' : ''} ${record.id_cvs_store ? '' : 'disabled'}
+         onchange="toggleFavorite(${record.id_cvs_store}, this.checked)">`
     )
   },
   {
-    field: 'id', text: '店舗ID', size: '100px', sortable: true,
-    render: (record) => (record.id ? record.id : '<span class="new-badge">(未登録)</span>')
+    field: 'id_cvs_store', text: '店舗ID', size: '90px', sortable: true,
+    render: (record) => (record.id_cvs_store ? record.id_cvs_store : '<span class="new-badge">(未登録)</span>')
   },
   {
-    field: 'name', text: '店舗名', size: '30%', sortable: true, searchable: true,
+    field: 'nm_cvs_store', text: '店舗名', size: '22%', sortable: true, searchable: true,
     render: (record) => {
       if (record.recid === editingRecid) {
-        return `<input type="text" class="edit-input" value="${escapeHtml(record.name)}"
-                  oninput="updateField(${record.recid},'name',this.value)">`;
+        return `<input type="text" class="edit-input" value="${escapeHtml(record.nm_cvs_store)}"
+                  oninput="updateField(${record.recid},'nm_cvs_store',this.value)">`;
       }
-      return escapeHtml(record.name);
+      return escapeHtml(record.nm_cvs_store);
     }
   },
-  {
-    field: 'pref_code', text: '都道府県', size: '20%', sortable: true,
-    render: (record) => {
-      if (record.recid === editingRecid) {
-        const opts = ['<option value="">選択してください</option>']
-          .concat(prefectures.map((p) =>
-            `<option value="${p.code}" ${p.code === record.pref_code ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
-          )).join('');
-        return `<select class="edit-select" onchange="updateField(${record.recid},'pref_code',this.value)">${opts}</select>`;
-      }
-      return escapeHtml(prefName(record.pref_code));
-    }
-  },
+  makeMasterSelectColumn('cd_region', 'nm_region', '都道府県', '18%', () => regions),
+  makeMasterSelectColumn('cd_cvs_location', 'nm_cvs_location', '立地', '15%', () => locations),
+  makeMasterSelectColumn('cd_cvs_chain', 'nm_cvs_chain', 'チェーン', '15%', () => chains),
   {
     field: 'actions', text: '', size: '100px',
     render: (record) => (
@@ -160,7 +176,10 @@ function addRow() {
   }
   newRowSeq -= 1;
   const recid = newRowSeq; // 負数なのでサーバ採番済みIDと衝突しない
-  grid.records.unshift({ recid, id: null, name: '', pref_code: '', favorite: false, w2ui: { style: DIRTY_ROW_STYLE } });
+  grid.records.unshift({
+    recid, id_cvs_store: null, nm_cvs_store: '', cd_region: '', cd_cvs_location: '', cd_cvs_chain: '',
+    favorite: false, w2ui: { style: DIRTY_ROW_STYLE }
+  });
   editingRecid = recid;
   grid.refresh();
 }
@@ -171,14 +190,20 @@ function submitAll() {
     return;
   }
   for (const r of grid.records) {
-    if (!r.name || !r.pref_code) {
+    if (!r.nm_cvs_store || !r.cd_region || !r.cd_cvs_location || !r.cd_cvs_chain) {
       alert('未入力の項目がある行があります。');
       return;
     }
   }
 
   const payload = {
-    stores: grid.records.map((r) => ({ id: r.id, name: r.name, pref_code: r.pref_code }))
+    stores: grid.records.map((r) => ({
+      id_cvs_store: r.id_cvs_store,
+      nm_cvs_store: r.nm_cvs_store,
+      cd_region: r.cd_region,
+      cd_cvs_location: r.cd_cvs_location,
+      cd_cvs_chain: r.cd_cvs_chain
+    }))
   };
 
   fetch('/api/stores', {
@@ -199,31 +224,54 @@ function submitAll() {
 }
 
 $(function () {
-  fetch('/api/prefectures')
-    .then((r) => r.json())
-    .then((prefRes) => {
-      prefectures = prefRes.prefectures;
+  Promise.all([
+    fetch('/api/regions').then((r) => r.json()),
+    fetch('/api/cvs_locations').then((r) => r.json()),
+    fetch('/api/cvs_chains').then((r) => r.json())
+  ]).then(([regionRes, locationRes, chainRes]) => {
+    regions = regionRes.regions;
+    locations = locationRes.locations;
+    chains = chainRes.chains;
 
-      $('#grid').w2grid({
-        name: 'grid',
-        header: '店舗一覧',
-        url: '/api/stores/search',
-        httpHeaders: { 'X-User-Id': CURRENT_USER_ID },
-        postData: { favorite_only: true }, // 初期表示はお気に入りのみ
-        limit: 5,
-        show: { header: false, toolbar: true, toolbarSearch: true, footer: true, lineNumbers: false },
-        columns: columns
-      });
-      grid = w2ui.grid;
-
-      $('#btn-add').on('click', addRow);
-      $('#btn-submit').on('click', submitAll);
-      $('#chk-favorite-only').on('change', function () {
-        grid.postData.favorite_only = $(this).is(':checked');
-        grid.offset = 0;
-        grid.reload();
-      });
+    $('#grid').w2grid({
+      name: 'grid',
+      header: '店舗一覧',
+      url: '/api/stores/search',
+      httpHeaders: { 'X-User-Id': CURRENT_USER_ID },
+      postData: { favorite_only: true }, // 初期表示はお気に入りのみ
+      limit: 5,
+      show: { header: false, toolbar: true, toolbarSearch: true, footer: true, lineNumbers: false },
+      columns: columns,
+      // グリッド内蔵の検索(検索ボックス/Enter)・リロードボタン・列ヘッダでのソートは、
+      // 編集中/行追加中だと矛盾した状態になるため、確認の上でリセットしてから実行する
+      onSearch: function (event) {
+        if (event.phase !== 'before') return;
+        if (!confirmResetEdit()) event.preventDefault();
+      },
+      onReload: function (event) {
+        if (event.phase !== 'before') return;
+        if (!confirmResetEdit()) event.preventDefault();
+      },
+      onSort: function (event) {
+        if (event.phase !== 'before') return;
+        if (!confirmResetEdit()) event.preventDefault();
+      }
     });
+    grid = w2ui.grid;
+
+    $('#btn-add').on('click', addRow);
+    $('#btn-submit').on('click', submitAll);
+    $('#chk-favorite-only').on('change', function () {
+      const $chk = $(this);
+      if (!confirmResetEdit()) {
+        $chk.prop('checked', !$chk.is(':checked')); // 確認をキャンセルしたので表示を元に戻す
+        return;
+      }
+      grid.postData.favorite_only = $chk.is(':checked');
+      grid.offset = 0;
+      grid.reload();
+    });
+  });
 });
 </script>
 
