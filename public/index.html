@@ -189,7 +189,15 @@ function submitAll() {
     alert('編集中の行があります。先に「完了」を押してください。');
     return;
   }
-  for (const r of grid.records) {
+
+  // 行追加・編集で背景色がついている行（=まだ登録していない変更）だけを登録対象にする
+  const dirtyRecords = grid.records.filter((r) => r.w2ui && r.w2ui.style === DIRTY_ROW_STYLE);
+  if (dirtyRecords.length === 0) {
+    alert('更新内容がありません。');
+    return;
+  }
+
+  for (const r of dirtyRecords) {
     if (!r.nm_cvs_store || !r.cd_region || !r.cd_cvs_location || !r.cd_cvs_chain) {
       alert('未入力の項目がある行があります。');
       return;
@@ -197,7 +205,7 @@ function submitAll() {
   }
 
   const payload = {
-    stores: grid.records.map((r) => ({
+    stores: dirtyRecords.map((r) => ({
       id_cvs_store: r.id_cvs_store,
       nm_cvs_store: r.nm_cvs_store,
       cd_region: r.cd_region,
