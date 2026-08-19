@@ -19,7 +19,9 @@ let newRowSeq = 0;         // 未登録行の recid 採番用（負数にして�
 
 // ポップアップを呼び出す側は、URLクエリパラメータ ?store_id=<店舗ID> を付けて開くことで
 // 「その店舗を選択した状態」で表示できる（例: stores.html?store_id=3）。
-// 指定店舗はお気に入り以外の可能性があるため、指定時は「お気に入りのみ表示」を外して検索する。
+// 指定店舗はお気に入り以外の可能性があるため、指定時は「お気に入りのみ表示」を外して
+// 全件対象で検索する。ただしページングにより1ページ目に対象店舗が含まれていない場合は、
+// 無理に探しにいかず未選択のままにする。
 const initialStoreId = (() => {
   const raw = new URLSearchParams(location.search).get('store_id');
   const n = Number(raw);
@@ -285,11 +287,9 @@ $(function () {
       header: '店舗一覧',
       url: API_STORES_SEARCH,
       httpHeaders: { 'X-User-Id': CURRENT_USER_ID },
-      // 初期表示はお気に入りのみ。ただしstore_id指定時はお気に入りに絞らず、
-      // 指定店舗だけに絞り込んだ状態で最初の1回だけロードする（onLoadで後片付けする）
-      postData: initialStoreId !== null
-        ? { favorite_only: false, id_cvs_store: initialStoreId }
-        : { favorite_only: true },
+      // 初期表示はお気に入りのみ。ただしstore_id指定時はお気に入りに絞らず全件を対象に検索する
+      // （指定店舗がお気に入り以外の可能性があるため）
+      postData: { favorite_only: initialStoreId === null },
       limit: 5,
       show: { header: false, toolbar: true, toolbarSearch: true, footer: true, lineNumbers: false },
       columns: columns,
@@ -312,13 +312,13 @@ $(function () {
     });
     grid = w2ui.grid;
 
-    // 初回ロード完了後、store_id指定の絞り込みを解除し、対象行を選択状態にする。
+    // 初回ロード完了後、取得できた範囲（1ページ目）に対象店舗があれば選択状態にする。
+    // ページングでまだ取得していない範囲にある場合は、無理に探しにいかず未選択のままでよい。
     // ('load' イベントの config オプション(onLoad)は before フェーズでしか呼ばれないため、
     //  after フェーズを拾うには on('load:after', ...) を使う必要がある)
     grid.on('load:after', function () {
       if (!initialSelectionPending) return;
       initialSelectionPending = false;
-      delete grid.postData.id_cvs_store; // 以降は通常どおり全件を対象にする
       const rec = grid.records.find((r) => r.id_cvs_store === initialStoreId);
       if (rec) grid.select(rec.recid);
     });
