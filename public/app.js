@@ -1,3 +1,11 @@
+// --- API エンドポイント ---
+const API_REGIONS = '/api/regions';
+const API_CVS_LOCATIONS = '/api/cvs_locations';
+const API_CVS_CHAINS = '/api/cvs_chains';
+const API_STORES = '/api/stores';
+const API_STORES_SEARCH = '/api/stores/search';
+const API_FAVORITES = '/api/favorites';
+
 // 本来は Spring Boot 側の認証(ログインユーザー)から取得する値。
 // ここではモックとして固定IDを全リクエストのヘッダに載せる。
 const CURRENT_USER_ID = 'user1';
@@ -61,7 +69,7 @@ function confirmResetEdit() {
 
 // お気に入りチェックボックスは編集モードと独立して、クリックした瞬間に即保存する
 function toggleFavorite(storeId, checked) {
-  fetch(`/api/favorites/${storeId}`, {
+  fetch(`${API_FAVORITES}/${storeId}`, {
     method: checked ? 'POST' : 'DELETE',
     headers: { 'X-User-Id': CURRENT_USER_ID }
   })
@@ -179,7 +187,7 @@ function submitAll() {
     }))
   };
 
-  fetch('/api/stores', {
+  fetch(API_STORES, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -198,9 +206,9 @@ function submitAll() {
 
 $(function () {
   Promise.all([
-    fetch('/api/regions').then((r) => r.json()),
-    fetch('/api/cvs_locations').then((r) => r.json()),
-    fetch('/api/cvs_chains').then((r) => r.json())
+    fetch(API_REGIONS).then((r) => r.json()),
+    fetch(API_CVS_LOCATIONS).then((r) => r.json()),
+    fetch(API_CVS_CHAINS).then((r) => r.json())
   ]).then(([regionRes, locationRes, chainRes]) => {
     regions = regionRes.regions;
     locations = locationRes.locations;
@@ -209,7 +217,7 @@ $(function () {
     $('#grid').w2grid({
       name: 'grid',
       header: '店舗一覧',
-      url: '/api/stores/search',
+      url: API_STORES_SEARCH,
       httpHeaders: { 'X-User-Id': CURRENT_USER_ID },
       postData: { favorite_only: true }, // 初期表示はお気に入りのみ
       limit: 5,
