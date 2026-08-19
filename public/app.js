@@ -37,6 +37,16 @@ function markDirty(recid) {
   if (rec) rec.w2ui = Object.assign({}, rec.w2ui, { style: DIRTY_ROW_STYLE });
 }
 
+function isDirty(rec) {
+  return !!(rec.w2ui && rec.w2ui.style === DIRTY_ROW_STYLE);
+}
+
+// 編集中の行、または完了はしたがまだ登録していない行（背景色付き）が
+// 1つでもあれば「未保存の変更あり」とする。ポップアップのOK/キャンセルの判定に使う。
+function hasUnsavedChanges() {
+  return editingRecid !== null || grid.records.some(isDirty);
+}
+
 function startEdit(recid) {
   if (editingRecid !== null && editingRecid !== recid) {
     alert('編集中の行があります。先に「完了」を押してください。');
@@ -164,7 +174,7 @@ function submitAll() {
   }
 
   // 行追加・編集で背景色がついている行（=まだ登録していない変更）だけを登録対象にする
-  const dirtyRecords = grid.records.filter((r) => r.w2ui && r.w2ui.style === DIRTY_ROW_STYLE);
+  const dirtyRecords = grid.records.filter(isDirty);
   if (dirtyRecords.length === 0) {
     alert('更新内容がありません。');
     return;
@@ -204,6 +214,48 @@ function submitAll() {
     .catch((err) => alert('送信に失敗しました: ' + err.message));
 }
 
+// ポップアップとして組み込まれた際の結果表示用（単体動作確認用のデフォルト表示）
+function showPopupResult(text) {
+  $('#popup-result').text(text);
+}
+
+// OK: 選択中の1行を呼び出し元に返す。画面遷移・後処理は組込側で行う（ここでは行わない）。
+function handleOk() {
+  if (hasUnsavedChanges()) {
+    alert('保存していない変更があります。「完了」と「登録」を行ってから選択してください。');
+    return;
+  }
+
+  const selectedRecids = grid.getSelection();
+  const recid = selectedRecids.length ? selectedRecids[0] : null;
+  const record = recid != null ? grid.records.find((r) => r.recid === recid) : null;
+
+  if (typeof window.onStoreSelect === 'function') {
+    window.onStoreSelect(record);
+  } else {
+    console.log('[popup] onStoreSelect is not implemented. selected record =', record);
+  }
+  showPopupResult(record ? `選択: ${record.nm_cvs_store} (ID: ${record.id_cvs_store})` : '選択: なし');
+}
+
+// キャンセル: 店舗を選択せずに閉じる。未保存の変更があれば確認の上で破棄する。
+function handleCancel() {
+  if (hasUnsavedChanges()) {
+    if (!confirm('保存していない変更があります。破棄してよろしいですか？')) {
+      return; // 編集を続ける
+    }
+    editingRecid = null;
+    grid.reload(); // 未登録の追加行・編集中の変更を破棄し、サーバの最新状態に戻す
+  }
+
+  if (typeof window.onStoreCancel === 'function') {
+    window.onStoreCancel();
+  } else {
+    console.log('[popup] onStoreCancel is not implemented.');
+  }
+  showPopupResult('キャンセルされました');
+}
+
 $(function () {
   Promise.all([
     fetch(API_REGIONS).then((r) => r.json()),
@@ -223,6 +275,8 @@ $(function () {
       limit: 5,
       show: { header: false, toolbar: true, toolbarSearch: true, footer: true, lineNumbers: false },
       columns: columns,
+      selectType: 'row',   // 行クリックで選択（OKボタンで使う）
+      multiSelect: false,  // ポップアップの選択は1件のみ
       // グリッド内蔵の検索(検索ボックス/Enter)・リロードボタン・列ヘッダでのソートは、
       // 編集中/行追加中だと矛盾した状態になるため、確認の上でリセットしてから実行する
       onSearch: function (event) {
@@ -242,6 +296,8 @@ $(function () {
 
     $('#btn-add').on('click', addRow);
     $('#btn-submit').on('click', submitAll);
+    $('#btn-ok').on('click', handleOk);
+    $('#btn-cancel').on('click', handleCancel);
     $('#chk-favorite-only').on('change', function () {
       const $chk = $(this);
       if (!confirmResetEdit()) {
