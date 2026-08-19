@@ -323,6 +323,17 @@ $(function () {
       if (rec) grid.select(rec.recid);
     });
 
+    // w2uiの無限スクロール(pull-more)は、全件読み込み終わった後も画面下部の
+    // 「もっと読み込み中」スピナー要素をクリック可能なまま残してしまうことがある。
+    // その状態でクリックすると、存在しないoffsetへの追加リクエストが飛び、
+    // w2ui内部の件数チェックが不整合と判定して
+    // 「Your remote data source record count has changed...」という紛らわしい
+    // メッセージを出してしまうため、読み込み終わったらクリックできないようにしておく。
+    grid.on('load:after', function () {
+      if (grid.last.xhr_hasMore) return;
+      $('#grid_grid_rec_more, #grid_grid_frec_more').off('click.load-more').hide();
+    });
+
     $('#btn-add').on('click', addRow);
     $('#btn-submit').on('click', submitAll);
     $('#btn-ok').on('click', handleOk);
