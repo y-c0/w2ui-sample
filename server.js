@@ -107,13 +107,18 @@ app.get('/api/stores/search', (req, res) => {
     offset = 0,
     search = [],
     sort = [],
-    favorite_only = false
+    favorite_only = false,
+    id_cvs_store = null // ポップアップを店舗ID指定で開いたときの初回ロード限定の絞り込み
   } = parsed;
 
   let result = stores.map((s) => ({ ...s, favorite: favSet.has(s.id_cvs_store) }));
 
   if (favorite_only) {
     result = result.filter((s) => s.favorite);
+  }
+
+  if (id_cvs_store != null) {
+    result = result.filter((s) => s.id_cvs_store === id_cvs_store);
   }
 
   search.forEach((cond) => {
