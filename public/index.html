@@ -59,12 +59,21 @@ function updateField(recid, field, value) {
   if (rec) rec[field] = value;
 }
 
+// 行追加・編集した行は、登録するまで背景色を変えてわかりやすくする
+const DIRTY_ROW_STYLE = 'background-color: #fff3cd;';
+
+function markDirty(recid) {
+  const rec = grid.records.find((r) => r.recid === recid);
+  if (rec) rec.w2ui = Object.assign({}, rec.w2ui, { style: DIRTY_ROW_STYLE });
+}
+
 function startEdit(recid) {
   if (editingRecid !== null && editingRecid !== recid) {
     alert('編集中の行があります。先に「完了」を押してください。');
     return;
   }
   editingRecid = recid;
+  markDirty(recid);
   grid.refresh();
 }
 
@@ -151,7 +160,7 @@ function addRow() {
   }
   newRowSeq -= 1;
   const recid = newRowSeq; // 負数なのでサーバ採番済みIDと衝突しない
-  grid.records.unshift({ recid, id: null, name: '', pref_code: '', favorite: false });
+  grid.records.unshift({ recid, id: null, name: '', pref_code: '', favorite: false, w2ui: { style: DIRTY_ROW_STYLE } });
   editingRecid = recid;
   grid.refresh();
 }
