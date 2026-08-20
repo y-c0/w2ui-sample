@@ -138,9 +138,12 @@ function toggleFavorite(storeId, checked) {
 
 // 都道府県・立地・チェーンはいずれも「マスタから選択するプルダウン列」という同じ形なので、
 // 列定義を共通のファクトリ関数で生成する（コード/名称のペアをマスタ配列から解決する）
+// searchable の選択肢(options.items)はマスタ取得(非同期)後でないと作れないため、ここでは空にしておき、
+// マスタ取得後に setSearchItems() で差し込む
 function makeMasterSelectColumn(idField, nameField, text, size, getMaster) {
   return {
-    field: idField, text, size, sortable: true,
+    field: idField, text, caption: text, size, sortable: true,
+    searchable: { type: 'list', options: { items: [] } },
     render: (record) => {
       if (record.recid === editingRecid) {
         const opts = ['<option value="">選択してください</option>']
@@ -168,7 +171,7 @@ const columns = [
     render: (record) => (record.id_cvs_store ? record.id_cvs_store : '<span class="new-badge">(未登録)</span>')
   },
   {
-    field: 'nm_cvs_store', text: '店舗名', size: '22%', sortable: true, searchable: true,
+    field: 'nm_cvs_store', text: '店舗名', caption: '店舗名', size: '22%', sortable: true, searchable: true,
     render: (record) => {
       if (record.recid === editingRecid) {
         return `<input type="text" class="edit-input" value="${escapeHtml(record.nm_cvs_store)}"
@@ -189,6 +192,12 @@ const columns = [
     )
   }
 ];
+
+// makeMasterSelectColumn で作った列の詳細検索の選択肢に、取得済みマスタを差し込む
+function setSearchItems(field, idField, nameField, master) {
+  const col = columns.find((c) => c.field === field);
+  col.searchable.options.items = master.map((m) => ({ id: m[idField], text: m[nameField] }));
+}
 
 function addRow() {
   if (editingRecid !== null) {
@@ -303,6 +312,12 @@ $(function () {
     regions = regionRes.regions;
     locations = locationRes.locations;
     chains = chainRes.chains;
+
+    // 詳細検索（Searchボタン）の都道府県・立地・チェーンをプルダウン選択にするため、
+    // マスタ取得後に選択肢を差し込む（グリッド初期化前に行う必要がある）
+    setSearchItems('cd_region', 'cd_region', 'nm_region', regions);
+    setSearchItems('cd_cvs_location', 'cd_cvs_location', 'nm_cvs_location', locations);
+    setSearchItems('cd_cvs_chain', 'cd_cvs_chain', 'nm_cvs_chain', chains);
 
     // store_id指定時は、お気に入り以外の店舗である可能性があるため「お気に入りのみ」を外す。
     // 表示中のチェックボックスの見た目も実際の検索条件に合わせておく。
