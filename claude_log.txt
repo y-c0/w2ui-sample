@@ -268,3 +268,74 @@ load:after のタイミングで、読み込みが完了していたらこの要
 
 
 ＝＝
+ファイル名を変更して。
+index.html → cvs_store.html
+app.js → cvs_store.js
+
+注意
+localhost:3000 で 画面に直接アクセスし、今まで通り動くこと
+
+index.html → cvs_store.html、app.js → cvs_store.js にリネームし、
+cvs_store.html 内の <script> 参照と、server.js の express.static に index: 'cvs_store.html' オプションを追加しました。
+localhost:3000/ へのアクセスで従来通り動作することを確認済みです。
+
+＝＝
+
+この画面からテストで社内のアプリのAPIに繋ぐのに、クロスオリジンの許可が必要だと思うが、何をすればよい？
+
+OUT
+warning: in the working copy of 'public/cvs_store.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server.js', LF will be replaced by CRLF the next time Git touches it
+[feature/popup-select-ok-cancel a04033b] 社内アプリAPIへのテスト接続用にserver.jsへプロキシを追加
+ 2 files changed, 39 insertions(+), 6 deletions(-)
+コミットしました（a04033b）。
+
+まとめ
+
+server.js に /api/real/* プロキシルートを追加。ブラウザは常に localhost:3000（同一オリジン）にアクセスし、
+サーバー側で社内アプリへ転送するためCORS制約を回避します。
+社内アプリのベースURLは server.js の REAL_API_BASE_URL（現在は空文字）に1箇所記載するだけでOKです。
+public/cvs_store.js の REAL_API_ENDPOINTS はプロキシパス（/api/real/...）に固定済みなのでこちらの編集は不要です。
+社内アプリのパス構成が /api/regions 等と異なる場合のみ調整が必要です。
+USE_MOCK_API / REAL_API_BASE_URL を切り替えて実アプリ接続をテストしてください
+（認証がCookieベースの場合はこのプロキシでは自動転送されない点は別課題として残っています）。
+
+
+試してみたけど、社内のサーバ側でログインのURLに回されちゃうな
+Tarend API Testerだと大丈夫なのだけど、何が違うのだろう
+
+
+社内アプリはブラウザ内で認証情報（ログインセッションのCookie）を要求しているようですね。差が出る理由を整理します。
+
+Talend API Tester はブラウザの拡張機能として動くため、拡張機能から社内アプリのドメインへリクエストを送る際、そのブラウザに保存されている社内アプリのログインCookie（ログイン済みセッション）がそのまま使われます。つまり「ブラウザで既にログイン済み」という状態をそのまま利用できています。
+
+一方、今回作った server.js のプロキシはNode.jsのサーバープロセスから直接fetchしているため、ブラウザのCookie(社内アプリのセッション情報)を一切持っていません。未認証の匿名アクセス扱いになり、社内アプリ側（おそらくSpring Securityなど）がログインページへリダイレクトしてしまう、という状態です。CORSの問題とは別に、認証情報が転送されていないことが原因です。
+server.js には既に /api/real/* プロキシを実装済み（前回のタスクで実装・コミット a04033b）。ブラウザは常に localhost:3000（同一オリジン）にアクセスし、server.js がサーバー間で社内アプリへ転送することでCORS制約は解消できている。
+実際に USE_MOCK_API=false にして社内アプリへ接続テストしたところ、社内アプリ側のログインURLにリダイレクトされてしまう事象が発生した。原因はCORSとは別の問題で、認証情報（ログインセッションのCookie）がプロキシ経由のリクエストに付与されていないため。比較対象の「Talend API Tester」はブラウザ拡張機能としてブラウザ内で動作し、社内アプリドメインに対してブラウザが保持する既存のログインCookieがそのまま使われるため成功する。一方 server.js はNode.jsの別プロセスからfetchしており、ブラウザのCookieを一切持たないため未認証扱いになる。
+対応として、ユーザーがブラウザで社内アプリにログイン後、そのセッションCookieの値を手動で server.js に設定し、プロキシが全リクエストにそのCookieを付与して転送できるようにする（簡易・実用的な方法として決定）。
+
+
+注意点（ユーザーへの申し送り）
+ログインセッションには有効期限があるため、社内アプリ側でセッション切れ・再ログインが発生した場合は REAL_API_COOKIE の値を都度取り直す必要がある
+Cookieの値には認証情報が含まれるため、server.js にハードコードしたままコミット・共有しないよう注意（テスト後は空文字に戻すか、ローカルのみの変更に留める）
+検証方法
+ブラウザで社内アプリにログインし、DevTools の Network タブで認証済みリクエストの Cookie ヘッダー値を確認・コピー
+server.js の REAL_API_COOKIE にその値を設定し、REAL_API_BASE_URL も設定済みの状態で npm start
+public/cvs_store.js の USE_MOCK_API を false にして http://localhost:3000 を開く
+ログインURLへのリダイレクトが発生せず、社内アプリのデータがグリッドに表示されることを確認
+確認後、REAL_API_COOKIE を空文字に戻し、USE_MOCK_API を true に戻してモック動作も確認する
+
+
+コミットしました（c7484ff）。
+
+原因のまとめ: Talend API Testerはブラウザ拡張機能としてブラウザ内で動作するため、社内アプリドメインの既存ログインCookieがそのまま使われます。一方 server.js のプロキシはNode.jsの別プロセスからのリクエストで、ブラウザのCookieを一切持たないため未認証扱いになり、ログインURLへリダイレクトされていました。
+
+対応: server.js に REAL_API_COOKIE を追加し、値を設定するとプロキシ経由の全リクエストに Cookie ヘッダーとして付与されるようにしました（httpbin.orgで転送されることを確認済み）。使い方は以下です。
+
+ブラウザで社内アプリにログイン
+DevTools の Network タブで認証済みリクエストの Cookie ヘッダー値をコピー
+server.js の REAL_API_COOKIE（202行目付近）に貼り付け
+テスト後はコミット前に空文字へ戻す（Cookieに認証情報が含まれるため）
+セッションが切れたら再度貼り直しが必要です。
+
+＝＝
