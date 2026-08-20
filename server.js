@@ -92,18 +92,23 @@ app.get('/api/stores', (req, res) => {
 });
 
 // w2ui グリッドのリモートデータソース用エンドポイント
-// リクエスト形式(w2ui既定の dataType: 'HTTPJSON'): GET(クエリパラメータ) または POST(application/x-www-form-urlencoded)
-//   いずれも request=<JSONエンコード文字列>。w2uiのビルドによってGET/POSTのどちらを使うか異なるため両対応する。
+// リクエスト形式(cvs_store.js で w2utils.settings.dataType = 'JSON' に設定。社内アプリと同じ形式):
+//   POST, Content-Type: application/json のボディに直接パラメータが入る
 //   { limit, offset, search: [{field,type,operator,value}], sort: [{field,direction}], favorite_only }
+//   （旧 dataType: 'HTTPJSON' の GET(クエリパラメータ) / request=<JSONエンコード文字列> 形式との後方互換も残す）
 // レスポンス形式(w2uiが期待する形): { status: 'success', total, records: [{recid, id_cvs_store, nm_cvs_store, cd_region, cd_cvs_location, cd_cvs_chain, favorite}] }
 function handleStoresSearch(req, res) {
   const userId = getUserId(req);
   const favSet = getFavoriteSet(userId);
-  let parsed = {};
-  try {
-    parsed = JSON.parse(req.query.request || (req.body && req.body.request) || '{}');
-  } catch (e) {
-    return res.status(400).json({ status: 'error', message: 'invalid request param' });
+  let parsed;
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+    parsed = req.body;
+  } else {
+    try {
+      parsed = JSON.parse(req.query.request || (req.body && req.body.request) || '{}');
+    } catch (e) {
+      return res.status(400).json({ status: 'error', message: 'invalid request param' });
+    }
   }
   const {
     limit = 20,

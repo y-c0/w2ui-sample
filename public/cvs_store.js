@@ -32,6 +32,12 @@ const API_STORES = API_ENDPOINTS.STORES;
 const API_STORES_SEARCH = API_ENDPOINTS.STORES_SEARCH;
 const API_FAVORITES = API_ENDPOINTS.FAVORITES;
 
+// w2ui既定の dataType は 'HTTPJSON'（リクエストボディが request=<JSONエンコード文字列> という
+// application/x-www-form-urlencoded）だが、社内アプリは 'JSON'（Content-Type: application/json で
+// パラメータをそのままJSONボディとして送る）を使っているため、それに合わせる。
+// server.js の handleStoresSearch もこの形式でボディを読む前提になっている。
+w2utils.settings.dataType = 'JSON';
+
 // 本来は Spring Boot 側の認証(ログインユーザー)から取得する値。
 // ここではモックとして固定IDを全リクエストのヘッダに載せる。
 const CURRENT_USER_ID = 'user1';
