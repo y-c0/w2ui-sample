@@ -200,6 +200,12 @@ app.post('/api/stores', (req, res) => {
 // ブラウザ(cvs_store.js)は常にこのサーバー(localhost:3000)にリクエストするため、
 // クロスオリジン制約を受けない。ここからサーバー間で社内アプリへ転送する。
 const REAL_API_BASE_URL = '';
+// TODO: ブラウザで社内アプリにログイン後、DevTools(Network/Application)で確認できる
+// Cookie ヘッダーの値をそのまま貼り付ける（例: "JSESSIONID=xxxx; other=yyy"）。
+// server.js はブラウザのCookieを持たないため、社内アプリ側でログイン必須の場合はここに設定しないと
+// 未認証扱いでログインURLにリダイレクトされる。セッション切れ時は都度貼り直しが必要。
+// 認証情報を含むため、テスト後は空文字に戻し、値を入れたままコミット・共有しないこと。
+const REAL_API_COOKIE = '';
 
 app.all('/api/real/*', async (req, res) => {
   if (!REAL_API_BASE_URL) {
@@ -212,6 +218,7 @@ app.all('/api/real/*', async (req, res) => {
   const headers = {};
   if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
   if (req.headers['x-user-id']) headers['X-User-Id'] = req.headers['x-user-id'];
+  if (REAL_API_COOKIE) headers['Cookie'] = REAL_API_COOKIE;
 
   try {
     const response = await fetch(targetUrl, {
