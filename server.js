@@ -3,7 +3,9 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public'), { index: 'cvs_store.html' }));
+app.use('/lib', express.static(path.join(__dirname, 'lib')));
 
 // --- 都道府県マスタ ---
 const regions = [
@@ -90,15 +92,16 @@ app.get('/api/stores', (req, res) => {
 });
 
 // w2ui グリッドのリモートデータソース用エンドポイント
-// リクエスト形式(w2ui既定の dataType: 'HTTPJSON'): GET + クエリパラメータ request=<JSONエンコード文字列>
+// リクエスト形式(w2ui既定の dataType: 'HTTPJSON'): GET(クエリパラメータ) または POST(application/x-www-form-urlencoded)
+//   いずれも request=<JSONエンコード文字列>。w2uiのビルドによってGET/POSTのどちらを使うか異なるため両対応する。
 //   { limit, offset, search: [{field,type,operator,value}], sort: [{field,direction}], favorite_only }
 // レスポンス形式(w2uiが期待する形): { status: 'success', total, records: [{recid, id_cvs_store, nm_cvs_store, cd_region, cd_cvs_location, cd_cvs_chain, favorite}] }
-app.get('/api/stores/search', (req, res) => {
+function handleStoresSearch(req, res) {
   const userId = getUserId(req);
   const favSet = getFavoriteSet(userId);
   let parsed = {};
   try {
-    parsed = JSON.parse(req.query.request || '{}');
+    parsed = JSON.parse(req.query.request || (req.body && req.body.request) || '{}');
   } catch (e) {
     return res.status(400).json({ status: 'error', message: 'invalid request param' });
   }
@@ -146,7 +149,10 @@ app.get('/api/stores/search', (req, res) => {
   const paged = result.slice(offset, offset + limit).map((s) => ({ ...s, recid: s.id_cvs_store }));
 
   res.json({ status: 'success', total, records: paged });
-});
+}
+
+app.get('/api/stores/search', handleStoresSearch);
+app.post('/api/stores/search', handleStoresSearch);
 
 // お気に入り登録/解除（クリックした瞬間に即時反映）
 app.post('/api/favorites/:storeId', (req, res) => {
