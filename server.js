@@ -196,6 +196,36 @@ app.post('/api/stores', (req, res) => {
   res.json({ stores });
 });
 
+// --- 社内アプリAPIへのテスト接続用プロキシ ---
+// ブラウザ(cvs_store.js)は常にこのサーバー(localhost:3000)にリクエストするため、
+// クロスオリジン制約を受けない。ここからサーバー間で社内アプリへ転送する。
+const REAL_API_BASE_URL = '';
+
+app.all('/api/real/*', async (req, res) => {
+  if (!REAL_API_BASE_URL) {
+    return res.status(500).json({ error: 'REAL_API_BASE_URL が未設定です。server.js に社内アプリのベースURLを記載してください。' });
+  }
+
+  const forwardPath = req.originalUrl.replace(/^\/api\/real/, '');
+  const targetUrl = REAL_API_BASE_URL + forwardPath;
+
+  const headers = {};
+  if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
+  if (req.headers['x-user-id']) headers['X-User-Id'] = req.headers['x-user-id'];
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body)
+    });
+    const data = await response.json().catch(() => null);
+    res.status(response.status).json(data);
+  } catch (e) {
+    res.status(502).json({ error: '社内アプリへの接続に失敗しました', detail: String(e) });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

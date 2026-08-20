@@ -11,13 +11,16 @@ const MOCK_API_ENDPOINTS = {
   FAVORITES: '/api/favorites'
 };
 
+// 実アプリのAPIは別オリジンのためCORSに阻まれる。server.js の /api/real/* プロキシ経由で
+// 社内アプリへ転送する（プロキシ先ベースURLは server.js の REAL_API_BASE_URL に記載）。
+// 社内アプリ側のパスが /api/regions 等と異なる場合は、このパスか server.js 側の転送処理を調整すること。
 const REAL_API_ENDPOINTS = {
-  REGIONS: '', // TODO: 実際のURLを記載
-  CVS_LOCATIONS: '', // TODO: 実際のURLを記載
-  CVS_CHAINS: '', // TODO: 実際のURLを記載
-  STORES: '', // TODO: 実際のURLを記載
-  STORES_SEARCH: '', // TODO: 実際のURLを記載
-  FAVORITES: '' // TODO: 実際のURLを記載
+  REGIONS: '/api/real/regions',
+  CVS_LOCATIONS: '/api/real/cvs_locations',
+  CVS_CHAINS: '/api/real/cvs_chains',
+  STORES: '/api/real/stores',
+  STORES_SEARCH: '/api/real/stores/search',
+  FAVORITES: '/api/real/favorites'
 };
 
 const API_ENDPOINTS = USE_MOCK_API ? MOCK_API_ENDPOINTS : REAL_API_ENDPOINTS;
