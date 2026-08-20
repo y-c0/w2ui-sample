@@ -1,10 +1,33 @@
 // --- API エンドポイント ---
-const API_REGIONS = '/api/regions';
-const API_CVS_LOCATIONS = '/api/cvs_locations';
-const API_CVS_CHAINS = '/api/cvs_chains';
-const API_STORES = '/api/stores';
-const API_STORES_SEARCH = '/api/stores/search';
-const API_FAVORITES = '/api/favorites';
+// USE_MOCK_API を切り替えることで、server.js のモックAPIと実アプリのAPIを切り替えられる
+const USE_MOCK_API = true;
+
+const MOCK_API_ENDPOINTS = {
+  REGIONS: '/api/regions',
+  CVS_LOCATIONS: '/api/cvs_locations',
+  CVS_CHAINS: '/api/cvs_chains',
+  STORES: '/api/stores',
+  STORES_SEARCH: '/api/stores/search',
+  FAVORITES: '/api/favorites'
+};
+
+const REAL_API_ENDPOINTS = {
+  REGIONS: '', // TODO: 実際のURLを記載
+  CVS_LOCATIONS: '', // TODO: 実際のURLを記載
+  CVS_CHAINS: '', // TODO: 実際のURLを記載
+  STORES: '', // TODO: 実際のURLを記載
+  STORES_SEARCH: '', // TODO: 実際のURLを記載
+  FAVORITES: '' // TODO: 実際のURLを記載
+};
+
+const API_ENDPOINTS = USE_MOCK_API ? MOCK_API_ENDPOINTS : REAL_API_ENDPOINTS;
+
+const API_REGIONS = API_ENDPOINTS.REGIONS;
+const API_CVS_LOCATIONS = API_ENDPOINTS.CVS_LOCATIONS;
+const API_CVS_CHAINS = API_ENDPOINTS.CVS_CHAINS;
+const API_STORES = API_ENDPOINTS.STORES;
+const API_STORES_SEARCH = API_ENDPOINTS.STORES_SEARCH;
+const API_FAVORITES = API_ENDPOINTS.FAVORITES;
 
 // 本来は Spring Boot 側の認証(ログインユーザー)から取得する値。
 // ここではモックとして固定IDを全リクエストのヘッダに載せる。
