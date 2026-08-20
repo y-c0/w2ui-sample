@@ -74,15 +74,15 @@ function getFavoriteSet(userId) {
   return favoritesByUser[userId];
 }
 
-app.get('/api/regions', (req, res) => {
+app.post('/api/regions', (req, res) => {
   res.json({ regions });
 });
 
-app.get('/api/cvs_locations', (req, res) => {
+app.post('/api/cvs_locations', (req, res) => {
   res.json({ locations: cvsLocations });
 });
 
-app.get('/api/cvs_chains', (req, res) => {
+app.post('/api/cvs_chains', (req, res) => {
   res.json({ chains: cvsChains });
 });
 

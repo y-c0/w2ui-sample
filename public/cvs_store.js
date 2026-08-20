@@ -296,9 +296,9 @@ function handleCancel() {
 
 $(function () {
   Promise.all([
-    fetch(API_REGIONS).then((r) => r.json()),
-    fetch(API_CVS_LOCATIONS).then((r) => r.json()),
-    fetch(API_CVS_CHAINS).then((r) => r.json())
+    fetch(API_REGIONS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.json()),
+    fetch(API_CVS_LOCATIONS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.json()),
+    fetch(API_CVS_CHAINS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.json())
   ]).then(([regionRes, locationRes, chainRes]) => {
     regions = regionRes.regions;
     locations = locationRes.locations;
